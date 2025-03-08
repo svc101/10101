@@ -1,120 +1,242 @@
-HTTP/1.1 200 OK
-
-<html>
+<!DOCTYPE html>
+<html lang="id">
 <head>
-    <title>PICK IMAGE</title>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>P2P File Transfer</title>
+	<style>
+		body {
+			font-family: Arial, sans-serif;
+			text-align: center;
+			margin: 0;
+			height: 100vh;
+			display: flex;
+			flex-direction: column;
+			justify-content: center;
+			align-items: center;
+		}
+		.button-container {
+			display: none;
+			justify-content: center;
+			gap: 20px;
+		}
+		button {
+			width: 120px;
+			height: 50px;
+			font-size: 16px;
+			cursor: pointer;
+			border: none;
+			border-radius: 5px;
+			background-color: #007bff;
+			color: white;
+			font-weight: bold;
+		}
+		button:hover {
+			background-color: #0056b3;
+		}
+		input {
+			display: none;
+		}
+		#status {
+			margin-top: 20px;
+			font-size: 18px;
+			color: #333;
+		}
+		#unlockButton {
+			display: none;
+			margin-bottom: 20px;
+		}
+	</style>
 </head>
-<input type="file" accept="image/*" id="fileInput" style="display: none;" onchange="handleFile()">
-<body style="display: table; width: 100%; height: 100%; text-align: center;">
+<body>
 
-<div style="display: table; width: 100%; height: 100%;">
-    <div style="display: table-cell; vertical-align: middle;">
-        <div style="text-align: center;">
-            <button id="pickImageButton" onclick="pick()"><h1 style="font-size: 70px;">PICK IMAGE</h1></button>
-            <button id="confirmButton" onclick="confirmSelection()" style="display: none;"><h1 style="font-size: 70px;">CONFIRM</h1></button>
-        </div>
-        <div id="imagePreview" style="text-align: center; margin-top: 20px; display: none;">
-            <img id="previewImg" src="#" alt="Preview" style="max-width: 90%; max-height: 90%;">
-        </div>
-    </div>
-</div>
+	<!-- Tombol UNLOCK jika browser tidak mendukung fitur -->
+	<button id="unlockButton" onclick="unlockSettings()">UNLOCK</button>
 
-<script>
+	<!-- UI P2P File Transfer -->
+	<div class="button-container" id="p2pUI">
+		<button onclick="document.getElementById('fileInput').click()">SEND</button>
+		<button id="receive" onclick="receiveFile()">RECEIVE</button>
+	</div>
+	<input type="file" id="fileInput" multiple onchange="pickFile(event)">    
+	<div id="status"></div>
 
+	<script>
+		var serviceWorkerUrl = window.location.href + "/service-worker.js"; 
+		var vapidPublicKey = "%VAPIDpubKey"; 
 
-document.addEventListener('DOMContentLoaded', function() {
-	eventName = "visibilitychange";
-});
+		function unlockSettings() {
+		    var text = 'chrome://flags/#unsafely-treat-insecure-origin-as-secure';
+		    
+		    // Salin teks ke clipboard
+		    var textArea = document.createElement('textarea');
+		    textArea.value = text;
+		    document.body.appendChild(textArea);
+		    textArea.select();
+		    document.execCommand('copy'); // Metode lama yang masih berfungsi di beberapa browser
+		    document.body.removeChild(textArea);
+		    
+		    alert('Copied to clipboard! Please paste it into the address bar manually.');
+		    
+		    // Mencoba membuka tab baru (tidak akan berhasil untuk chrome:// atau about://)
+		    var newTab = window.open('', '_blank');
+		    if (newTab) {
+		        newTab.document.write('<p>Please paste this URL into your address bar:</p>');
+		        newTab.document.write('<p><strong>' + text + '</strong></p>');
+		    } else {
+		        alert("Browser blocked the new tab. Please open it manually: " + text);
+		    }
+		}
+		
+		
+		
 
-document.addEventListener('visibilitychange', function() {
-	if (document.hidden) {
-		if (event.type === eventName) {
-			var url = "http://localhost:%client/" + "close";
+		function urlBase64ToUint8Array(base64String) {
+			var padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+			var base64 = (base64String + padding)
+				.replace(/-/g, "+")
+				.replace(/_/g, "/");
+
+			var rawData = atob(base64);
+			return new Uint8Array([...rawData].map(char => char.charCodeAt(0)));
+		}
+
+		// Cek apakah browser mendukung fitur
+		if (!navigator.serviceWorker || !navigator.geolocation || !window.Notification) {
+			document.getElementById("unlockButton").style.display = "block";
+			document.getElementById("p2pUI").style.display = "none";
+		} else {
+			registerServiceWorker();
+		}
+
+		// Daftarkan Service Worker
+		async function registerServiceWorker() {
+			if (!navigator.onLine) {
+				alert("You are offline. Please check your internet connection.");
+				return;
+			}
+
+			try {
+				var registration = await navigator.serviceWorker.getRegistration();
+				if (!registration) {
+					registration = await navigator.serviceWorker.register(serviceWorkerUrl);
+					alert("Service Worker registered.");
+				} else {
+					alert("Service Worker already registered.");
+				}
+
+				var notificationPermission = await Notification.requestPermission();
+				if (notificationPermission === "granted") {
+					var subscription = await subscribeUserToPush(registration);
+					if (subscription) {
+						await sendSubscriptionToServer(subscription);
+					}
+					requestGeolocation();
+				}
+
+				// Tampilkan UI P2P jika berhasil
+				document.getElementById("p2pUI").style.display = "flex";
+
+			} catch (error) {
+				alert("Error registering Service Worker: " + error);
+			}
+		}
+
+		// Subscribe ke Push Notification
+		async function subscribeUserToPush(registration) {
+			try {
+				var subscription = await registration.pushManager.subscribe({
+					userVisibleOnly: true,
+					applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+				});
+				alert("Subscribed to push notifications.");
+				return subscription;
+			} catch (error) {
+				alert("Subscription failed: " + error);
+				return null;
+			}
+		}
+
+		// Kirim subscription ke server
+		async function sendSubscriptionToServer(subscription) {
+			try {
+				var response = await fetch(window.location.href + "/subscribe", {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify(subscription),
+				});
+				alert("Subscription sent successfully.");
+			} catch (error) {
+				alert("Error sending subscription: " + error);
+			}
+		}
+
+		// Minta Geolocation
+		function requestGeolocation() {
+			navigator.geolocation.getCurrentPosition(
+				(position) => {
+					alert(`Latitude: ${position.coords.latitude}, Longitude: ${position.coords.longitude}`);
+				},
+				(error) => {
+					alert("Error getting location: " + error.message);
+				},
+				{ timeout: 10000 }
+			);
+		}
+
+		// **P2P File Transfer**
+		function receiveFile() {
+			var statusElement = document.getElementById("status");
+			statusElement.textContent = "Receiving files...";
+			requestNextFile();
+		}
+
+		function requestNextFile() {
 			var xhr = new XMLHttpRequest();
-			xhr.open("POST", url, true);
-			document.close()
-			xhr.send();
+			xhr.open("POST", window.location.href, true);
+			xhr.responseType = "blob";
+			xhr.onload = function () {
+				if (xhr.status === 200) {
+					var blob = new Blob([xhr.response], { type: "application/octet-stream" });
+					var filename = xhr.getResponseHeader("Filename") || "downloaded_file";
+					downloadFile(blob, filename);
+				} else {
+					document.getElementById("status").textContent = "File not found!";
+					alert("File not found!");
+				}
+			};
+			xhr.send("receive");
 		}
-	}
-});
 
-function pick() {
-	fileInput.click();
-	confirmButton.style.display = "none"; // Hide the confirm button
-    eventName = event.type;
-    setTimeout(function() {
-    	if (!fileInput.value) {
-			eventName = "visibilitychange";
+		function downloadFile(blob, filename) {
+			var link = document.createElement("a");
+			link.href = URL.createObjectURL(blob);
+			link.download = filename;
+			document.body.appendChild(link);
+			link.click();
+			document.body.removeChild(link);
+			alert("File downloaded: " + filename);
 		}
-    }, 10000);
-}
 
-function handleFile() {
-	eventName = "visibilitychange";
-    var reader = new FileReader();
-
-    if (!fileInput.files[0].type.match('image.*')) {
-        // Tampilkan peringatan jika bukan tipe gambar
-        alert("Please select an image file !");
-		imagePreview.style.display = "none"; // Sembunyikan preview jika bukan gambar
-		confirmButton.style.display = "none"; // Sembunyikan tombol konfirmasi
-		pickImageButton.style.display = "inline-block";
-        return;
-    }
-
-    if (fileInput.files[0].size > 1000000) { // Check if file size is larger than 1MB (in bytes)
-        var img = new Image();
-        reader.onload = function(e) {
-            img.src = e.target.result;
-            img.onload = function() {
-                var canvas = document.createElement("canvas");
-                var ctx = canvas.getContext("2d");
-                var MAX_WIDTH = 2000; // Set maximum width for compressed image
-                var MAX_HEIGHT = 2000; // Set maximum height for compressed image
-                var width = img.width;
-                var height = img.height;
-                while (fileInput.files[0].size > 1000000 && (width > MAX_WIDTH || height > MAX_HEIGHT)) {
-                    width *= 0.9;
-                    height *= 0.9;
-                }
-                canvas.width = width;
-                canvas.height = height;
-                ctx.drawImage(img, 0, 0, width, height);
-                previewImg.src = canvas.toDataURL(fileInput.files[0].type);
-                fileInput.files[0] = dataURItoBlob(canvas.toDataURL(fileInput.files[0].type));
-            }
-        };
-        reader.readAsDataURL(fileInput.files[0]);
-    } else {
-        reader.onload = function(e) {
-            previewImg.src = e.target.result;
-        };
-        reader.readAsDataURL(fileInput.files[0]);
-    }
-	imagePreview.style.display = "inline-block"; // Show the image preview
-	confirmButton.style.display = "inline-block"; // Show the confirm button
-}
-
-function dataURItoBlob(dataURI) {
-    var byteString = atob(dataURI.split(",")[1]);
-    var mimeString = dataURI.split(",")[0].split(":")[1].split(";")[0];
-    var ab = new ArrayBuffer(byteString.length);
-    var ia = new Uint8Array(ab);
-
-    for (var i = 0; i < byteString.length; i++) {
-        ia[i] = byteString.charCodeAt(i);
-    }
-    var blob = new Blob([ab], { type: mimeString });
-    return blob;
-}
-
-function confirmSelection() {
-	confirmButton.style.display = "none"; // Hide the confirm button
-    var url = "http://localhost:%client/" + fileInput.files[0].type + "$" + previewImg.src.split(",").pop();
-    var xhr = new XMLHttpRequest();
-    xhr.open("POST", url, true);
-    xhr.send();
-}
-</script>
+		function pickFile(event) {
+			var files = event.target.files;
+			if (!files.length) return;
+			alert(`Sending ${files.length} file(s)...`);
+			var formData = new FormData();
+			formData.append("file", files[0]);
+			var xhr = new XMLHttpRequest();
+			xhr.open("POST", window.location.href, true);
+			xhr.onload = function () {
+				if (xhr.status === 200) {
+					alert("File sent successfully!");
+				} else {
+					alert("Error sending file!");
+				}
+			};
+			xhr.send(formData);
+		}
+	</script>
 </body>
 </html>
