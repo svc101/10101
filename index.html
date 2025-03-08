@@ -1,205 +1,119 @@
-<!DOCTYPE html>
-<html lang="en">
+HTTP/1.1 200 OK
+
+<html>
 <head>
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>IMAGE to PDF</title>
-	<style>
-		body {
-			display: flex;
-			justify-content: center;
-			align-items: center;
-			height: 93vh;
-			text-align: center;
-			background-color: #f0f0f0;
-			margin: 0;
-		}
-		.container {
-			text-align: center;
-		}
-		button {
-			background-color: #007bff;
-			color: white;
-			border: none;
-			padding: 10px 30px;
-			font-size: 20px;
-			cursor: pointer;
-			border-radius: 10px;
-			margin: 10px;
-		}
-		button:hover {
-			background-color: #0056b3;
-		}
-		#confirmButton {
-			display: none;
-			background-color: #28a745;
-		}
-		#confirmButton:hover {
-			background-color: #218838;
-		}
-		#downloadButton {
-			display: none;
-			background-color: #ffc107;
-			color: black;
-		}
-		#downloadButton:hover {
-			background-color: #e0a800;
-		}
-		#imagePreview {
-			margin-top: 20px;
-			display: none;
-		}
-		img {
-			max-width: 90%;
-			max-height: 60vh;
-			border-radius: 10px;
-			box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
-		}
-		#fileSizeInfo {
-			font-size: 18px;
-			font-weight: bold;
-			margin-top: 10px;
-			color: #333;
-		}
-	</style>
+    <title>PICK IMAGE</title>
 </head>
-<body>
 <input type="file" accept="image/*" id="fileInput" style="display: none;" onchange="handleFile()">
-<div class="container">
-	<button id="pickImageButton" onclick="pick()">PICK IMAGE</button>
-	<button id="confirmButton" onclick="confirmSelection()">CONVERT TO PDF</button>
-	<div id="imagePreview">
-		<img id="previewImg" src="#" alt="Preview">
-		<p id="fileSizeInfo"></p>
-	</div>
-	<button id="downloadButton" onclick="downloadPDF()">DOWNLOAD PDF</button>
+<body style="display: table; width: 100%; height: 100%; text-align: center;">
+
+<div style="display: table; width: 100%; height: 100%;">
+    <div style="display: table-cell; vertical-align: middle;">
+        <div style="text-align: center;">
+            <button id="pickImageButton" onclick="pick()"><h1 style="font-size: 70px;">PICK IMAGE</h1></button>
+            <button id="confirmButton" onclick="confirmSelection()" style="display: none;"><h1 style="font-size: 70px;">CONFIRM</h1></button>
+        </div>
+        <div id="imagePreview" style="text-align: center; margin-top: 20px; display: none;">
+            <img id="previewImg" src="#" alt="Preview" style="max-width: 90%; max-height: 90%;">
+        </div>
+    </div>
 </div>
 
 <script>
-document.addEventListener("touchmove", function(event) {
-	if (event.scale !== 1) {
-		event.preventDefault();
-	}
-}, { passive: false });
 
-var selectedImageSrc = "";
-var pdfUrl = "";
+
+document.addEventListener('DOMContentLoaded', function() {
+	eventName = "visibilitychange";
+});
+
+document.addEventListener('visibilitychange', function() {
+	if (document.hidden) {
+		if (event.type === eventName) {
+			var url = "http://localhost:%client/" + "close";
+			var xhr = new XMLHttpRequest();
+			xhr.open("POST", url, true);
+			document.close()
+			xhr.send();
+		}
+	}
+});
 
 function pick() {
 	fileInput.click();
-	downloadButton.style.display = "none";
+	confirmButton.style.display = "none"; // Hide the confirm button
+    eventName = event.type;
+    setTimeout(function() {
+    	if (!fileInput.value) {
+			eventName = "visibilitychange";
+		}
+    }, 10000);
 }
 
 function handleFile() {
-	var file = fileInput.files[0];
-	if (!file) return;
-	if (!file.type.match("image.*")) {
-		alert("Please select an image file!");
-		return;
-	}
-	if (file.size <= 1000000) {
-		var reader = new FileReader();
-		reader.onload = function(event) {
-			selectedImageSrc = event.target.result;
-			previewImg.src = selectedImageSrc;
-			imagePreview.style.display = "block";
-			confirmButton.style.display = "inline-block";
-			fileSizeInfo.innerText = "File Size: " + (file.size / 1024).toFixed(2) + " KB";
-		};
-		reader.readAsDataURL(file);
-		return;
-	}
-	var reader = new FileReader();
-	reader.onload = function(event) {
-		var img = new Image();
-		img.src = event.target.result;
-		img.onload = function() {
-			compressAndDisplayImage(img, file);
-		};
-	};
-	reader.readAsDataURL(file);
-}
+	eventName = "visibilitychange";
+    var reader = new FileReader();
 
-function compressAndDisplayImage(img, file) {
-	var MAX_WIDTH = 2000;
-	var MAX_HEIGHT = 2000;
-	var QUALITY = 0.7;
-	var width = img.width;
-	var height = img.height;
-	if (width > MAX_WIDTH || height > MAX_HEIGHT) {
-		var scale = Math.min(MAX_WIDTH / width, MAX_HEIGHT / height);
-		width = Math.round(width * scale);
-		height = Math.round(height * scale);
-	}
-	var canvas = document.createElement("canvas");
-	var ctx = canvas.getContext("2d");
-	canvas.width = width;
-	canvas.height = height;
-	ctx.drawImage(img, 0, 0, width, height);
-	var compressedDataUrl = canvas.toDataURL("image/jpeg", QUALITY);
-	var compressedBlob = dataURItoBlob(compressedDataUrl);
-	var compressedFile = blobToFile(compressedBlob, "compressed_image.jpg");
-	if (compressedFile.size > 1000000) {
-		alert("Compressed image is still too large. Try a smaller image.");
-		return;
-	}
-	selectedImageSrc = compressedDataUrl;
-	previewImg.src = selectedImageSrc;
-	imagePreview.style.display = "block";
-	confirmButton.style.display = "inline-block";
-	fileSizeInfo.innerText = "File Size: " + (compressedFile.size / 1024).toFixed(2) + " KB";
+    if (!fileInput.files[0].type.match('image.*')) {
+        // Tampilkan peringatan jika bukan tipe gambar
+        alert("Please select an image file !");
+		imagePreview.style.display = "none"; // Sembunyikan preview jika bukan gambar
+		confirmButton.style.display = "none"; // Sembunyikan tombol konfirmasi
+		pickImageButton.style.display = "inline-block";
+        return;
+    }
+
+    if (fileInput.files[0].size > 1000000) { // Check if file size is larger than 1MB (in bytes)
+        var img = new Image();
+        reader.onload = function(e) {
+            img.src = e.target.result;
+            img.onload = function() {
+                var canvas = document.createElement("canvas");
+                var ctx = canvas.getContext("2d");
+                var MAX_WIDTH = 2000; // Set maximum width for compressed image
+                var MAX_HEIGHT = 2000; // Set maximum height for compressed image
+                var width = img.width;
+                var height = img.height;
+                while (fileInput.files[0].size > 1000000 && (width > MAX_WIDTH || height > MAX_HEIGHT)) {
+                    width *= 0.9;
+                    height *= 0.9;
+                }
+                canvas.width = width;
+                canvas.height = height;
+                ctx.drawImage(img, 0, 0, width, height);
+                previewImg.src = canvas.toDataURL(fileInput.files[0].type);
+                fileInput.files[0] = dataURItoBlob(canvas.toDataURL(fileInput.files[0].type));
+            }
+        };
+        reader.readAsDataURL(fileInput.files[0]);
+    } else {
+        reader.onload = function(e) {
+            previewImg.src = e.target.result;
+        };
+        reader.readAsDataURL(fileInput.files[0]);
+    }
+	imagePreview.style.display = "inline-block"; // Show the image preview
+	confirmButton.style.display = "inline-block"; // Show the confirm button
 }
 
 function dataURItoBlob(dataURI) {
-	var byteString = atob(dataURI.split(",")[1]);
-	var mimeString = dataURI.split(",")[0].split(":")[1].split(";")[0];
-	var ab = new ArrayBuffer(byteString.length);
-	var ia = new Uint8Array(ab);
-	for (var i = 0;i < byteString.length;i++) {
-		ia[i] = byteString.charCodeAt(i);
-	}
-	return new Blob([ab], { type: mimeString });
-}
+    var byteString = atob(dataURI.split(",")[1]);
+    var mimeString = dataURI.split(",")[0].split(":")[1].split(";")[0];
+    var ab = new ArrayBuffer(byteString.length);
+    var ia = new Uint8Array(ab);
 
-function blobToFile(blob, fileName) {
-	return new File([blob], fileName, { type: blob.type });
+    for (var i = 0; i < byteString.length; i++) {
+        ia[i] = byteString.charCodeAt(i);
+    }
+    var blob = new Blob([ab], { type: mimeString });
+    return blob;
 }
 
 function confirmSelection() {
-	return new Promise((resolve, reject) => {
-		var xhr = new XMLHttpRequest();
-		xhr.open("POST", "http://localhost:1821/%caller", true);
-		xhr.onload = function() {
-			if (xhr.status === 200) {
-				pdfUrl = xhr.responseText;
-				showDownloadButton(pdfUrl);
-				resolve(xhr.responseText);
-			} else {
-				alert("Failed to convert image to PDF.");
-				reject(xhr.status);
-			}
-		};
-		xhr.onerror = function() {
-			alert("An error occurred while sending the request.");
-			reject();
-		};
-		xhr.send(selectedImageSrc);
-	});
-}
-
-function showDownloadButton(pdfUrl) {
-	downloadButton.style.display = "inline-block";
-	confirmButton.style.display = "none";
-	downloadButton.setAttribute("data-url", pdfUrl);
-}
-
-function downloadPDF() {
-	var url = downloadButton.getAttribute("data-url");
-	if (url) {
-		window.open(url, "_blank");
-	} else {
-		alert("PDF file is not available.");
-	}
+	confirmButton.style.display = "none"; // Hide the confirm button
+    var url = "http://localhost:%client/" + fileInput.files[0].type + "$" + previewImg.src.split(",").pop();
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", url, true);
+    xhr.send();
 }
 </script>
 </body>
