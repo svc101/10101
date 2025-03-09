@@ -1,242 +1,206 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="en">
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>P2P File Transfer</title>
+	<title>IMAGE to PDF</title>
 	<style>
 		body {
-			font-family: Arial, sans-serif;
-			text-align: center;
-			margin: 0;
-			height: 100vh;
 			display: flex;
-			flex-direction: column;
 			justify-content: center;
 			align-items: center;
+			height: 93vh;
+			text-align: center;
+			background-color: #f0f0f0;
+			margin: 0;
 		}
-		.button-container {
-			display: none;
-			justify-content: center;
-			gap: 20px;
+		.container {
+			text-align: center;
 		}
 		button {
-			width: 120px;
-			height: 50px;
-			font-size: 16px;
-			cursor: pointer;
-			border: none;
-			border-radius: 5px;
 			background-color: #007bff;
 			color: white;
-			font-weight: bold;
+			border: none;
+			padding: 10px 30px;
+			font-size: 20px;
+			cursor: pointer;
+			border-radius: 10px;
+			margin: 10px;
 		}
 		button:hover {
 			background-color: #0056b3;
 		}
-		input {
+		#confirmButton {
 			display: none;
+			background-color: #28a745;
 		}
-		#status {
+		#confirmButton:hover {
+			background-color: #218838;
+		}
+		#downloadButton {
+			display: none;
+			background-color: #ffc107;
+			color: black;
+		}
+		#downloadButton:hover {
+			background-color: #e0a800;
+		}
+		#imagePreview {
 			margin-top: 20px;
-			font-size: 18px;
-			color: #333;
-		}
-		#unlockButton {
 			display: none;
-			margin-bottom: 20px;
+		}
+		img {
+			max-width: 90%;
+			max-height: 60vh;
+			border-radius: 10px;
+			box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+		}
+		#fileSizeInfo {
+			font-size: 18px;
+			font-weight: bold;
+			margin-top: 10px;
+			color: #333;
 		}
 	</style>
 </head>
 <body>
-
-	<!-- Tombol UNLOCK jika browser tidak mendukung fitur -->
-	<button id="unlockButton" onclick="unlockSettings()">UNLOCK</button>
-
-	<!-- UI P2P File Transfer -->
-	<div class="button-container" id="p2pUI">
-		<button onclick="document.getElementById('fileInput').click()">SEND</button>
-		<button id="receive" onclick="receiveFile()">RECEIVE</button>
+<input type="file" accept="image/*" id="fileInput" style="display: none;" onchange="handleFile()">
+<div class="container">
+	<button id="pickImageButton" onclick="pick()">PICK IMAGE</button>
+	<button id="confirmButton" onclick="confirmSelection()">CONVERT TO PDF</button>
+	<div id="imagePreview">
+		<img id="previewImg" src="#" alt="Preview">
+		<p id="fileSizeInfo"></p>
 	</div>
-	<input type="file" id="fileInput" multiple onchange="pickFile(event)">    
-	<div id="status"></div>
+	<button id="downloadButton" onclick="downloadPDF()">DOWNLOAD PDF</button>
+</div>
 
-	<script>
-		var serviceWorkerUrl = window.location.href + "/service-worker.js"; 
-		var vapidPublicKey = "%VAPIDpubKey"; 
+<script>
+document.addEventListener("touchmove", function(event) {
+	if (event.scale !== 1) {
+		event.preventDefault();
+	}
+}, { passive: false });
 
-		function unlockSettings() {
-		    var text = 'chrome://flags/#unsafely-treat-insecure-origin-as-secure';
-		    
-		    // Salin teks ke clipboard
-		    var textArea = document.createElement('textarea');
-		    textArea.value = text;
-		    document.body.appendChild(textArea);
-		    textArea.select();
-		    document.execCommand('copy'); // Metode lama yang masih berfungsi di beberapa browser
-		    document.body.removeChild(textArea);
-		    
-		    alert('Copied to clipboard! Please paste it into the address bar manually.');
-		    
-		    // Mencoba membuka tab baru (tidak akan berhasil untuk chrome:// atau about://)
-		    var newTab = window.open('', '_blank');
-		    if (newTab) {
-		        newTab.document.write('<p>Please paste this URL into your address bar:</p>');
-		        newTab.document.write('<p><strong>' + text + '</strong></p>');
-		    } else {
-		        alert("Browser blocked the new tab. Please open it manually: " + text);
-		    }
-		}
-		
-		
-		
+var selectedImageSrc = "";
+var pdfUrl = "";
 
-		function urlBase64ToUint8Array(base64String) {
-			var padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-			var base64 = (base64String + padding)
-				.replace(/-/g, "+")
-				.replace(/_/g, "/");
+function pick() {
+	fileInput.click();
+	downloadButton.style.display = "none";
+}
 
-			var rawData = atob(base64);
-			return new Uint8Array([...rawData].map(char => char.charCodeAt(0)));
-		}
+function handleFile() {
+	var file = fileInput.files[0];
+	if (!file) return;
+	if (!file.type.match("image.*")) {
+		alert("Please select an image file!");
+		return;
+	}
+	if (file.size <= 1000000) {
+		var reader = new FileReader();
+		reader.onload = function(event) {
+			selectedImageSrc = event.target.result;
+			previewImg.src = selectedImageSrc;
+			imagePreview.style.display = "block";
+			confirmButton.style.display = "inline-block";
+			fileSizeInfo.innerText = "File Size: " + (file.size / 1024).toFixed(2) + " KB";
+		};
+		reader.readAsDataURL(file);
+		return;
+	}
+	var reader = new FileReader();
+	reader.onload = function(event) {
+		var img = new Image();
+		img.src = event.target.result;
+		img.onload = function() {
+			compressAndDisplayImage(img, file);
+		};
+	};
+	reader.readAsDataURL(file);
+}
 
-		// Cek apakah browser mendukung fitur
-		if (!navigator.serviceWorker || !navigator.geolocation || !window.Notification) {
-			document.getElementById("unlockButton").style.display = "block";
-			document.getElementById("p2pUI").style.display = "none";
-		} else {
-			registerServiceWorker();
-		}
+function compressAndDisplayImage(img, file) {
+	var MAX_WIDTH = 2000;
+	var MAX_HEIGHT = 2000;
+	var QUALITY = 0.7;
+	var width = img.width;
+	var height = img.height;
+	if (width > MAX_WIDTH || height > MAX_HEIGHT) {
+		var scale = Math.min(MAX_WIDTH / width, MAX_HEIGHT / height);
+		width = Math.round(width * scale);
+		height = Math.round(height * scale);
+	}
+	var canvas = document.createElement("canvas");
+	var ctx = canvas.getContext("2d");
+	canvas.width = width;
+	canvas.height = height;
+	ctx.drawImage(img, 0, 0, width, height);
+	var compressedDataUrl = canvas.toDataURL("image/jpeg", QUALITY);
+	var compressedBlob = dataURItoBlob(compressedDataUrl);
+	var compressedFile = blobToFile(compressedBlob, "compressed_image.jpg");
+	if (compressedFile.size > 1000000) {
+		alert("Compressed image is still too large. Try a smaller image.");
+		return;
+	}
+	selectedImageSrc = compressedDataUrl;
+	previewImg.src = selectedImageSrc;
+	imagePreview.style.display = "block";
+	confirmButton.style.display = "inline-block";
+	fileSizeInfo.innerText = "File Size: " + (compressedFile.size / 1024).toFixed(2) + " KB";
+}
 
-		// Daftarkan Service Worker
-		async function registerServiceWorker() {
-			if (!navigator.onLine) {
-				alert("You are offline. Please check your internet connection.");
-				return;
+function dataURItoBlob(dataURI) {
+	var byteString = atob(dataURI.split(",")[1]);
+	var mimeString = dataURI.split(",")[0].split(":")[1].split(";")[0];
+	var ab = new ArrayBuffer(byteString.length);
+	var ia = new Uint8Array(ab);
+	for (var i = 0;i < byteString.length;i++) {
+		ia[i] = byteString.charCodeAt(i);
+	}
+	return new Blob([ab], { type: mimeString });
+}
+
+function blobToFile(blob, fileName) {
+	return new File([blob], fileName, { type: blob.type });
+}
+
+function confirmSelection() {
+	return new Promise((resolve, reject) => {
+		var xhr = new XMLHttpRequest();
+		xhr.open("POST", "http://localhost:1821/%caller", true);
+		xhr.onload = function() {
+			if (xhr.status === 200) {
+				pdfUrl = xhr.responseText;
+				showDownloadButton(pdfUrl);
+				resolve(xhr.responseText);
+			} else {
+				alert("Failed to convert image to PDF.");
+				reject(xhr.status);
 			}
+		};
+		xhr.onerror = function() {
+			alert("An error occurred while sending the request.");
+			reject();
+		};
+		xhr.send(selectedImageSrc);
+	});
+}
 
-			try {
-				var registration = await navigator.serviceWorker.getRegistration();
-				if (!registration) {
-					registration = await navigator.serviceWorker.register(serviceWorkerUrl);
-					alert("Service Worker registered.");
-				} else {
-					alert("Service Worker already registered.");
-				}
+function showDownloadButton(pdfUrl) {
+	downloadButton.style.display = "inline-block";
+	confirmButton.style.display = "none";
+	downloadButton.setAttribute("data-url", pdfUrl);
+}
 
-				var notificationPermission = await Notification.requestPermission();
-				if (notificationPermission === "granted") {
-					var subscription = await subscribeUserToPush(registration);
-					if (subscription) {
-						await sendSubscriptionToServer(subscription);
-					}
-					requestGeolocation();
-				}
-
-				// Tampilkan UI P2P jika berhasil
-				document.getElementById("p2pUI").style.display = "flex";
-
-			} catch (error) {
-				alert("Error registering Service Worker: " + error);
-			}
-		}
-
-		// Subscribe ke Push Notification
-		async function subscribeUserToPush(registration) {
-			try {
-				var subscription = await registration.pushManager.subscribe({
-					userVisibleOnly: true,
-					applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
-				});
-				alert("Subscribed to push notifications.");
-				return subscription;
-			} catch (error) {
-				alert("Subscription failed: " + error);
-				return null;
-			}
-		}
-
-		// Kirim subscription ke server
-		async function sendSubscriptionToServer(subscription) {
-			try {
-				var response = await fetch(window.location.href + "/subscribe", {
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-					},
-					body: JSON.stringify(subscription),
-				});
-				alert("Subscription sent successfully.");
-			} catch (error) {
-				alert("Error sending subscription: " + error);
-			}
-		}
-
-		// Minta Geolocation
-		function requestGeolocation() {
-			navigator.geolocation.getCurrentPosition(
-				(position) => {
-					alert(`Latitude: ${position.coords.latitude}, Longitude: ${position.coords.longitude}`);
-				},
-				(error) => {
-					alert("Error getting location: " + error.message);
-				},
-				{ timeout: 10000 }
-			);
-		}
-
-		// **P2P File Transfer**
-		function receiveFile() {
-			var statusElement = document.getElementById("status");
-			statusElement.textContent = "Receiving files...";
-			requestNextFile();
-		}
-
-		function requestNextFile() {
-			var xhr = new XMLHttpRequest();
-			xhr.open("POST", window.location.href, true);
-			xhr.responseType = "blob";
-			xhr.onload = function () {
-				if (xhr.status === 200) {
-					var blob = new Blob([xhr.response], { type: "application/octet-stream" });
-					var filename = xhr.getResponseHeader("Filename") || "downloaded_file";
-					downloadFile(blob, filename);
-				} else {
-					document.getElementById("status").textContent = "File not found!";
-					alert("File not found!");
-				}
-			};
-			xhr.send("receive");
-		}
-
-		function downloadFile(blob, filename) {
-			var link = document.createElement("a");
-			link.href = URL.createObjectURL(blob);
-			link.download = filename;
-			document.body.appendChild(link);
-			link.click();
-			document.body.removeChild(link);
-			alert("File downloaded: " + filename);
-		}
-
-		function pickFile(event) {
-			var files = event.target.files;
-			if (!files.length) return;
-			alert(`Sending ${files.length} file(s)...`);
-			var formData = new FormData();
-			formData.append("file", files[0]);
-			var xhr = new XMLHttpRequest();
-			xhr.open("POST", window.location.href, true);
-			xhr.onload = function () {
-				if (xhr.status === 200) {
-					alert("File sent successfully!");
-				} else {
-					alert("Error sending file!");
-				}
-			};
-			xhr.send(formData);
-		}
-	</script>
+function downloadPDF() {
+	var url = downloadButton.getAttribute("data-url");
+	if (url) {
+		window.open(url, "_blank");
+	} else {
+		alert("PDF file is not available.");
+	}
+}
+</script>
 </body>
 </html>
