@@ -1,412 +1,104 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
-<title>PROXIMATE</title>
-<style>
-	body {
-		background-color: #00000000;
-		display: flex;
-		justify-content: flex-start;
-		align-items: center;
-		height: 90vh;
-		margin: 5px;
-		flex-direction: column;
-	}
-	.dropdown {
-		margin-bottom: 5px;
-	}
-	select {
-		width: 30vw;
-		height: 40px;
-		font-size: 1.3rem;
-		border: 1px solid #ccc;
-		border-radius: 5px;
-		padding: 5px;
-		text-align: center;
-	}
-	#sample_id {
-		width: 78vw;
-		height: 40px;
-		font-size: 1.7rem;
-		border: 1px solid #ccc;
-		border-radius: 5px;
-		padding: 5px;
-		text-align: center;
-		background-color: #FFEEEEEE;
-	}
-	.weighing {
-		width: 80%;
-		min-height: 70%;
-		background-color: #000000;
-		border: 2px solid #ccc;
-		border-radius: 20px;
-		padding: 20px;
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		grid-gap: 10px;
-		margin-bottom: 5px;
-	}
-	.button {
-		width: 100%;
-		height: 5vh;
-		background-color: #f0f0f0;
-		border: none;
-		border-radius: 5px;
-		font-size: 1.3rem;
-		font-weight: bold;
-		display: flex;
-		justify-content: center;
-		align-items: center;
-		cursor: pointer;
-	}
-	.button:hover {
-		background-color: #e0e0e0;
-	}
-	#no_dish_simplo,
-	#no_dish_duplo,
-	#abs {
-		justify-self: center;
-		width: 50%;
-	}
-	#mass_simplo,
-	#mass_duplo,
-	#simplo,
-	#duplo {
-		background-color: #FFEEEEEE;
-		justify-self: center;
-		align-self: center;
-		width: 75%;
-	}
-	#simplo,
-	#duplo {
-		grid-row: 9;
-	}
-	#avg,
-	#abs {
-		grid-row: 10;
-	}
-	#avg,
-	#abs {
-		background-color: yellow;
-	}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rekam, Putar, dan Grafik Frekuensi</title>
+  <style>
+    canvas {
+      border: 1px solid black;
+    }
+  </style>
 </head>
+<body>
+  <h1>Rekam, Putar Suara, dan Grafik Frekuensi</h1>
 
-<div class="dropdown" style="display: flex; justify-content: space-between; align-items: center; width: 95%;">
-	<button id="delete" onclick="openButton(this.id)" style="width: 15%; height: 40px; font-size: 1.5rem;">⛔</button>
-	<select id="sample_id">
-	</select>
-</div>
+  <canvas id="frequency-graph" width="800" height="400"></canvas>
 
-<div class="dropdown" style="display: flex; justify-content: space-between; align-items: center; width: 95%; border: 1px solid #ccc; border-radius: 5px; padding: 5px; text-align: center;">
-	<button id="send" onclick="openButton(this.id)" style="width: 15%; height: 40px; font-size: 1.5rem;">📤</button>
-	<input type="date" id="pick_date" style="width: 50%; height: 40px; font-size: 1.5rem;">
-	<select id="parameter" onchange="parameterChange()">
-		<option value="im_">IM</option>
-		<option value="ash_">ASH</option>
-		<option value="vm_">VM</option>
-		<option value="rm_iso_">RM ISO</option>
-	</select>
-</div>
+  <script>
+    let audioContext, mediaRecorder, audioStream, audioSource, analyser, canvas, ctx, dataArray, bufferLength;
 
+    // Fungsi untuk memulai perekaman, pemutaran, dan grafik frekuensi
+    function startRecording() {
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => {
+          audioStream = stream;
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
-<div class="weighing" id="weighing_buttons">
-	<button id="no_dish_simplo" class="button" onclick="openButton(this.id)"></button>
-	<button id="no_dish_duplo" class="button" onclick="openButton(this.id)"></button>
-	<button id="dish_sample_simplo" class="button" onclick="openButton(this.id)"></button>
-	<button id="dish_sample_duplo" class="button" onclick="openButton(this.id)"></button>
-	<button id="empty_dish_simplo" class="button" onclick="openButton(this.id)"></button>
-	<button id="empty_dish_duplo" class="button" onclick="openButton(this.id)"></button>
-	<button id="mass_simplo" class="button"></button>
-	<button id="mass_duplo" class="button"></button>
-	<button id="result_simplo" class="button" onclick="openButton(this.id)"></button>
-	<button id="result_duplo" class="button" onclick="openButton(this.id)"></button>
-	<button id="simplo" class="button"></button>
-	<button id="duplo" class="button"></button>
-	<button id="avg" class="button"></button>
-	<button id="abs" class="button"></button>
-</div>
+          // Membuat sumber audio dari stream mikrofon
+          audioSource = audioContext.createMediaStreamSource(stream);
 
-<div class="navigation" style="display: flex; justify-content: space-between; width: 80%; justify-self: center;">
-	<button id="prev" onclick="navigate(-1)" style="width: 75px; height: 40px; font-size: 1.7rem; border: 1px solid #ccc; border-radius: 5px; padding: 5px; text-align: center; align-items: center;"><<<</button>
-	<button id="new" onclick="createNewID()" style="width: 150px; height: 40px; font-size: 1.7rem; border: 1px solid #ccc; border-radius: 5px; padding: 5px; text-align: center; align-items: center;">➕</button>
-	<button id="next" onclick="navigate(1)" style="width: 75px; height: 40px; font-size: 1.7rem; border: 1px solid #ccc; border-radius: 5px; padding: 5px; text-align: center; align-items: center;">>>></button>
-</div>
+          // Membuat AnalyserNode untuk menganalisis frekuensi
+          analyser = audioContext.createAnalyser();
+          analyser.fftSize = 2048;  // Ukuran FFT (Fast Fourier Transform)
+          bufferLength = analyser.frequencyBinCount;
+          dataArray = new Uint8Array(bufferLength);
 
-<script>
-	document.addEventListener("touchmove", function(event) {
-		if (event.scale !== 1) {
-			event.preventDefault();
-		}
-	}, { passive: false });
-	document.addEventListener("DOMContentLoaded", function () {
-		navigator.permissions.query({ name: "geolocation" }).then(function (permissionStatus) {
-			if (permissionStatus.state === "prompt") {
-				navigator.geolocation.getCurrentPosition(function (position) {
-				});
-			} else if (permissionStatus.state === "denied") {
-				window.close();
-			} else if (permissionStatus.state === "granted") {
-				sendData("start")
-				.then(response => {
-					document.getElementById("pick_date").value = JSON.parse(response).lastDate;
-					updateSampleID(response);
-				});
-			}
-		});
-	});
-	document.getElementById("pick_date").addEventListener("change", function() {
-		updateSampleID();
-	});
-	document.getElementById("sample_id").addEventListener("change", function() {
-		updateLabels();
-	});
-	document.getElementById("parameter").addEventListener("change", function() {
-		updateLabels();
-	});
-	
-	function openButton(buttonId) {
-		if( !`${sample_id.value}`) {
-			createNewID()
-		} else {
-			sendData(JSON.stringify({
-				"button":`${parameter.value}${buttonId}`,
-				"date":"SAMPLE_" + `${pick_date.value}`.replace(/-/g, "_"),
-				"var":`${sample_id.value}`.replace(/\s+/g, "_"),
-				"id":`${sample_id.value}`
-			}))
-			.then(response => {
-				if (response.includes("delete") || response.includes("send")) {
-					updateSampleID(response);
-				} else if (response.includes("button")) {
-					updateLabels();
-				}
-			})
-		}
-	};
-	
-	function createNewID() {
-		if (!`${pick_date.value}`) {
-			document.getElementById("pick_date").click();
-			return;
-		}
-		var newID = prompt("Create new ID");
-		if (newID) {
-			sendData(JSON.stringify({
-				"date":"SAMPLE_" + `${pick_date.value}`.replace(/-/g, "_"),
-				"new":newID.toUpperCase(),
-				"var":newID.toUpperCase().replace(/\s+/g, "_")
-			}))
-			.then(response => {
-				if (response === "exist") {
-					createNewID()
-				} else {
-					updateSampleID(response);
-				}
-			})
-		}
-	};
-	
-	function navigate(direction) {
-		var navigationIndex = parseInt(`${sample_id.selectedIndex}`) + direction;
-		if (navigationIndex >= 0 && navigationIndex < `${sample_id.options.length}`) {
-			document.getElementById("sample_id").selectedIndex = navigationIndex;
-		}
-		updateLabels();
-	};
-	
-	function parameterChange() {
-		var weighingButtons = document.getElementById("weighing_buttons");
-		document.querySelectorAll(".ash-button, .rm-button").forEach(button => button.remove());
-		if (`${parameter.value}` === "ash_") {
-			var ashEmptyResultSimplo = document.createElement("button");
-			ashEmptyResultSimplo.id = "empty_result_simplo";
-			ashEmptyResultSimplo.className = "button ash-button";
-			ashEmptyResultSimplo.onclick = () => openButton(ashEmptyResultSimplo.id);
-			var ashEmptyResultDuplo = document.createElement("button");
-			ashEmptyResultDuplo.id = "empty_result_duplo";
-			ashEmptyResultDuplo.className = "button ash-button";
-			ashEmptyResultDuplo.onclick = () => openButton(ashEmptyResultDuplo.id);
-			weighingButtons.appendChild(ashEmptyResultSimplo);
-			weighingButtons.appendChild(ashEmptyResultDuplo);
-		} else if (`${parameter.value}` === "rm_iso_") {
-			var result2Simplo = document.createElement("button");
-			result2Simplo.id = "result2_simplo";
-			result2Simplo.className = "button rm-button";
-			result2Simplo.onclick = () => openButton(result2Simplo.id);
-			var result2Duplo = document.createElement("button");
-			result2Duplo.id = "result2_duplo";
-			result2Duplo.className = "button rm-button";
-			result2Duplo.onclick = () => openButton(result2Duplo.id);
-			weighingButtons.appendChild(result2Simplo);
-			weighingButtons.appendChild(result2Duplo);
-			var result3Simplo = document.createElement("button");
-			result3Simplo.id = "result3_simplo";
-			result3Simplo.className = "button rm-button";
-			result3Simplo.onclick = () => openButton(result3Simplo.id);
-			var result3Duplo = document.createElement("button");
-			result3Duplo.id = "result3_duplo";
-			result3Duplo.className = "button rm-button";
-			result3Duplo.onclick = () => openButton(result3Duplo.id);
-			weighingButtons.appendChild(result3Simplo);
-			weighingButtons.appendChild(result3Duplo);
-			var result4Simplo = document.createElement("button");
-			result4Simplo.id = "result4_simplo";
-			result4Simplo.className = "button rm-button";
-			result4Simplo.onclick = () => openButton(result4Simplo.id);
-			var result4Duplo = document.createElement("button");
-			result4Duplo.id = "result4_duplo";
-			result4Duplo.className = "button rm-button";
-			result4Duplo.onclick = () => openButton(result4Duplo.id);
-			weighingButtons.appendChild(result4Simplo);
-			weighingButtons.appendChild(result4Duplo);
-			var buttons = document.querySelectorAll(".rm-button");
-			buttons.forEach(button => { button.style.height = "5vh"});
-		}
-	};
-	
-	function updateSampleID(index) {
-		sendData(JSON.stringify({
-			"sample":"SAMPLE_" + `${pick_date.value}`.replace(/-/g, "_")
-		}))
-		.then(response => {
-			if (!response.includes("%")) {
-				var response = response.split(",");
-					if (response.length > 0) {
-						document.getElementById("sample_id").innerHTML = "";
-						response.forEach(item => {
-							if (item) {
-								var option = document.createElement("option");
-								option.value = item;
-								option.textContent = item;
-								document.getElementById("sample_id").appendChild(option);
-							}
-						});
-						if (index) {
-							document.getElementById("sample_id").selectedIndex = JSON.parse(index).lastID;
-							document.getElementById("parameter").selectedIndex = JSON.parse(index).lastParameter;
-						}
-					}
-					if (`${parameter.value}` === "ash_" || `${parameter.value}` === "rm_iso_") {
-						parameterChange();
-					}
-				} else {
-					document.getElementById("sample_id").innerHTML = "";
-				}
-			updateLabels();
-		})
-	};
-		
-	function updateLabels() {
-		sendData(JSON.stringify({
-			"label":`${sample_id.value}`.replace(/\s+/g, "_"),
-			"lastDate":`${pick_date.value}`,
-			"lastID":`${sample_id.selectedIndex}`,
-			"lastParameter":`${parameter.selectedIndex}`
-		}))
-		.then(response => {
-			var im = "";
-			if (!response.includes("%")) {
-				var rows = response.split("\n");
-				var headers = rows[0].split(",");
-				var values = rows[1].split(",");
-				var data = {};
-				headers.forEach((header, index) => {
-					data[header] = values[index];
-				});
-			} else {
-				var data = "";
-			}
-			document.querySelectorAll(".weighing .button").forEach(button => {
-				button.textContent = data[`${parameter.value}${button.id}`] || "";
-			});
-			if (`${parameter.value}` === "ash_" || `${parameter.value}` === "rm_iso_") {
-				document.querySelectorAll(`.weighing .${`${parameter.value}` === "ash_" ? "ash-button" : "rm-button"}`).forEach(button => {
-					button.textContent = data[`${parameter.value}${button.id}`] || "";
-				});
-			}
-			if (data["im_result_simplo"] && data["im_result_duplo"] !== undefined) {
-				var im = parseFloat(((parseFloat(data["im_dish_sample_simplo"]) + parseFloat(data["im_dish_sample_duplo"])) - (parseFloat(data["im_result_simplo"]) + parseFloat(data["im_result_duplo"]))) / ((parseFloat(data["im_dish_sample_simplo"]) + parseFloat(data["im_dish_sample_duplo"])) - (parseFloat(data["im_empty_dish_simplo"]) + parseFloat(data["im_empty_dish_duplo"]))) * 100);
-			}
-			updateCalculation(im);
-		});
-	}
-	
-	function updateCalculation(im) {
-		//mass
-		if (parseFloat(`${dish_sample_simplo.textContent}`) && parseFloat(`${empty_dish_simplo.textContent}`)) {
-			document.getElementById("mass_simplo").textContent = (Math.round((parseFloat(`${dish_sample_simplo.textContent}`) - parseFloat(`${empty_dish_simplo.textContent}`)) * 10000) / 10000).toFixed(4);
-		}
-		if (parseFloat(`${dish_sample_duplo.textContent}`) && parseFloat(`${empty_dish_duplo.textContent}`)) {
-			document.getElementById("mass_duplo").textContent = (Math.round((parseFloat(`${dish_sample_duplo.textContent}`) - parseFloat(`${empty_dish_duplo.textContent}`)) * 10000) / 10000).toFixed(4);
-		}
-		if (`${parameter.value}` === "im_") {
-			//result im
-			if (parseFloat(`${result_simplo.textContent}`) && parseFloat(`${mass_simplo.textContent}`)) {
-				document.getElementById("simplo").textContent = (Math.round(((parseFloat(`${dish_sample_simplo.textContent}`) - parseFloat(`${result_simplo.textContent}`)) / parseFloat(`${mass_simplo.textContent}`) * 100) * 1000) / 1000).toFixed(3);
-			}
-			if (parseFloat(`${result_duplo.textContent}`) && parseFloat(`${mass_duplo.textContent}`)) {
-				document.getElementById("duplo").textContent = (Math.round(((parseFloat(`${dish_sample_duplo.textContent}`) - parseFloat(`${result_duplo.textContent}`)) / parseFloat(`${mass_duplo.textContent}`) * 100) * 1000) / 1000).toFixed(3);
-			}
-		} else if (`${parameter.value}` === "ash_") {
-			//result ash
-			if (parseFloat(`${result_simplo.textContent}`) && parseFloat(`${empty_result_simplo.textContent}`) && parseFloat(`${mass_simplo.textContent}`)) {
-				document.getElementById("simplo").textContent = (Math.round(((parseFloat(`${result_simplo.textContent}`) - parseFloat(`${empty_result_simplo.textContent}`)) / parseFloat(`${mass_simplo.textContent}`) * 100) * 1000) / 1000).toFixed(3);
-			}
-			if (parseFloat(`${result_duplo.textContent}`) && parseFloat(`${empty_result_duplo.textContent}`) && parseFloat(`${mass_duplo.textContent}`)) {
-				document.getElementById("duplo").textContent = (Math.round(((parseFloat(`${result_duplo.textContent}`) - parseFloat(`${empty_result_duplo.textContent}`)) / parseFloat(`${mass_duplo.textContent}`) * 100) * 1000) / 1000).toFixed(3);
-			}
-		} else if (`${parameter.value}` === "vm_" && im) {
-			//result vm
-			if (parseFloat(`${result_simplo.textContent}`) && parseFloat(`${mass_simplo.textContent}`)) {
-				document.getElementById("simplo").textContent = (Math.round((((parseFloat(`${dish_sample_simplo.textContent}`) - parseFloat(`${result_simplo.textContent}`)) / parseFloat(`${mass_simplo.textContent}`) * 100) - im) * 1000) / 1000).toFixed(3);
-			}
-			if (parseFloat(`${result_duplo.textContent}`) && parseFloat(`${mass_duplo.textContent}`)) {
-				document.getElementById("duplo").textContent = (Math.round((((parseFloat(`${dish_sample_duplo.textContent}`) - parseFloat(`${result_duplo.textContent}`)) / parseFloat(`${mass_duplo.textContent}`) * 100) - im) * 1000) / 1000).toFixed(3);
-			}
-		} else if (`${parameter.value}` === "rm_iso_") {
-			//result rm iso
-			if (parseFloat(`${result4_simplo.textContent}`) && parseFloat(`${mass_simplo.textContent}`)) {
-				document.getElementById("simplo").textContent = (Math.round(((parseFloat(`${dish_sample_simplo.textContent}`) - parseFloat(`${result4_simplo.textContent}`)) / parseFloat(`${mass_simplo.textContent}`) * 100) * 1000) / 1000).toFixed(3);
-			} else if (parseFloat(`${result3_simplo.textContent}`) && parseFloat(`${mass_simplo.textContent}`)) {
-				document.getElementById("simplo").textContent = (Math.round(((parseFloat(`${dish_sample_simplo.textContent}`) - parseFloat(`${result3_simplo.textContent}`)) / parseFloat(`${mass_simplo.textContent}`) * 100) * 1000) / 1000).toFixed(3);
-			} else if (parseFloat(`${result2_simplo.textContent}`) && parseFloat(`${mass_simplo.textContent}`)) {
-				document.getElementById("simplo").textContent = (Math.round(((parseFloat(`${dish_sample_simplo.textContent}`) - parseFloat(`${result2_simplo.textContent}`)) / parseFloat(`${mass_simplo.textContent}`) * 100) * 1000) / 1000).toFixed(3);
-			} else if (parseFloat(`${result_simplo.textContent}`) && parseFloat(`${mass_simplo.textContent}`)) {
-				document.getElementById("simplo").textContent = (Math.round(((parseFloat(`${dish_sample_simplo.textContent}`) - parseFloat(`${result_simplo.textContent}`)) / parseFloat(`${mass_simplo.textContent}`) * 100) * 1000) / 1000).toFixed(3);
-			}
-			if (parseFloat(`${result4_duplo.textContent}`) && parseFloat(`${mass_duplo.textContent}`)) {
-				document.getElementById("duplo").textContent = (Math.round(((parseFloat(`${dish_sample_duplo.textContent}`) - parseFloat(`${result4_duplo.textContent}`)) / parseFloat(`${mass_duplo.textContent}`) * 100) * 1000) / 1000).toFixed(3);
-			} else if (parseFloat(`${result3_duplo.textContent}`) && parseFloat(`${mass_duplo.textContent}`)) {
-				document.getElementById("duplo").textContent = (Math.round(((parseFloat(`${dish_sample_duplo.textContent}`) - parseFloat(`${result3_duplo.textContent}`)) / parseFloat(`${mass_duplo.textContent}`) * 100) * 1000) / 1000).toFixed(3);
-			} else if (parseFloat(`${result2_duplo.textContent}`) && parseFloat(`${mass_duplo.textContent}`)) {
-				document.getElementById("duplo").textContent = (Math.round(((parseFloat(`${dish_sample_duplo.textContent}`) - parseFloat(`${result2_duplo.textContent}`)) / parseFloat(`${mass_duplo.textContent}`) * 100) * 1000) / 1000).toFixed(3);
-			} else if (parseFloat(`${result_duplo.textContent}`) && parseFloat(`${mass_duplo.textContent}`)) {
-				document.getElementById("duplo").textContent = (Math.round(((parseFloat(`${dish_sample_duplo.textContent}`) - parseFloat(`${result_duplo.textContent}`)) / parseFloat(`${mass_duplo.textContent}`) * 100) * 1000) / 1000).toFixed(3);
-			}
-		}
-		//avg & abs
-		if (parseFloat(`${simplo.textContent}`) && parseFloat(`${duplo.textContent}`)) {
-			document.getElementById("avg").textContent = (Math.round(((parseFloat(`${simplo.textContent}`) + parseFloat(`${duplo.textContent}`)) / 2) * 100) / 100).toFixed(2);
-			document.getElementById("abs").textContent = (Math.round((Math.abs(parseFloat(`${simplo.textContent}`) - parseFloat(`${duplo.textContent}`))) * 100) / 100).toFixed(2);
-		}
-	};
-	
-	function sendData(data) {
-		return new Promise((resolve, reject) => {
-			var xhr = new XMLHttpRequest();
-			xhr.open("POST", "http://localhost:1821/PROXIMATE", true);
-			xhr.onload = function() {
-				if (xhr.status === 200) {
-					resolve(xhr.responseText);
-				}
-			}
-	        xhr.send(data);
-		});
+          // Menyambungkan sumber audio ke analyser dan ke speaker
+          audioSource.connect(analyser);
+          audioSource.connect(audioContext.destination);
+
+          // Membuat elemen Audio dan memutar suara langsung
+          const audioElement = new Audio();
+          audioElement.srcObject = stream;
+          audioElement.loop = true;
+          audioElement.play();
+
+          // Siapkan canvas untuk menggambar grafik
+          canvas = document.getElementById("frequency-graph");
+          ctx = canvas.getContext("2d");
+
+          // Mulai perekaman audio
+          mediaRecorder = new MediaRecorder(stream);
+          mediaRecorder.start();
+
+          // Fungsi untuk menggambar grafik frekuensi secara real-time
+          drawFrequencyGraph();
+        })
+        .catch(err => {
+          console.error("Gagal mendapatkan akses mikrofon:", err);
+        });
+    }
+
+    // Fungsi untuk menggambar grafik frekuensi
+    function drawFrequencyGraph() {
+      requestAnimationFrame(drawFrequencyGraph);
+
+      // Ambil data frekuensi
+      analyser.getByteFrequencyData(dataArray);
+
+      // Bersihkan canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Tentukan lebar bar dan jarak antar bar
+      const barWidth = (canvas.width / bufferLength) * 2.5;
+      let x = 0;
+
+      // Gambar grafik
+      for (let i = 0; i < bufferLength; i++) {
+        const barHeight = dataArray[i];
+        const r = barHeight + 25 * (i / bufferLength);  // Warna dinamis
+        const g = 250 * (i / bufferLength);
+        const b = 50;
+
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+        x += barWidth + 1;
+      }
+    }
+
+    // Mulai perekaman saat halaman dibuka
+    window.onload = startRecording;
+
+    // Hentikan perekaman ketika halaman ditutup
+    window.onbeforeunload = () => {
+      if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        mediaRecorder.stop();
+      }
+      if (audioStream) {
+        audioStream.getTracks().forEach(track => track.stop()); // Hentikan semua track
+      }
     };
-</script>
-
+  </script>
 </body>
 </html>
